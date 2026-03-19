@@ -1,174 +1,248 @@
 #include <Servo.h>
 #include <math.h>
 
-bool loop_is_delta = false ;
-
-const int bottonpin = 28;
-int bottonwait = 0 ;
-
+// ==============================================
+// PIN DEFINITIONS
+// ==============================================
 const int joystickX = 26;  // GP26 (ADC0) connected to VRx
 const int joystickY = 27;  // GP27 (ADC1) connected to VRy
 
+const int buttonPin = 28;
+
+int pinTheta = 16; // Servo output theta
+int pinPhi = 17; // Servo output phi
+
+// no idea what these do
 const int passThoughtphi = 4; // atual pin 6
 const int passThoughttheta = 5; // atual pin 6
 
-const int hz = 10 ;// loops per second
-const float wait= 1000/hz ;
+int buttonWait = 0;
 
-const int deg_per_sec = 25; //in degress per secon  this asmmes all code takes no time to exicte 100 is fors testing in percente values
-float deg_per_run = (deg_per_sec/hz);
+// ===============================================
+// PARAMETERS
+// ===============================================
+const int LOOP_HZ = 100;// loops per second (hz)
+const float LOOP_DELAY = 1000/LOOP_HZ ; // Delay
 
-float deltatheta = 0;
-float deltaphi = 0;
+const float MAX_DEG_PER_SEC = 100.0;
+const float DEG_PER_LOOP = MAX_DEG_PER_SEC / LOOP_HZ;
 
-float phi = 145;
-float theta = 145;
+const int xDEADZONE = 35; 
+const int yDEADZONE = 35;
 
-int midx = 0;
-int midy = 0;
+const float MIN_ANGLE = 0;
+const float MAX_ANGLE = 270;
+// ================================================
+// GLOBAL VARIABLES
+// ================================================
+bool deltaMode = true;
 
-float yjoy = 0;
-float xjoy = 0;
+Servo servoTheta;
+Servo servoPhi;
 
-int pintheta = 16;
-int pinphi = 17;
+int midX;
+int midY;
 
-float deadzone = 1; // in deg /sec
-float deadzone_per_run = deadzone/hz; //for use
+float deltaTheta = 0;
+float deltaPhi = 0;
 
-Servo servotheta;
-Servo servophi;
+float theta = 0;
+float phi = 135;
 
-float filter (float value) {
-  if ((value < deadzone_per_run) and (value > -deadzone_per_run)){
-    int value = 0 ;
+float joyX; //Store current joystick ADC readings
+float joyY;
+
+bool active = false;
+
+float deadzonevalueTheta = 0;
+float deadzonevaluePhi = 0;
+
+float filteredX = 0;
+float filteredY = 0;
+
+// ================================================
+// JOYSTICK CALIBRATION
+// ================================================
+
+void joycal() {
+  //Sets servo to start at angle 0
+
+  long sumX = 0;
+  long sumY = 0;
+
+//Averaging initial readings to calibrate
+  for(int i=0;i<=20;i++)
+  {
+    sumX += analogRead(joystickX);
+    sumY += analogRead(joystickY);
+    delay(5);
   }
-  return value ;
-}
-
-void writeanglephi(float w) {
-  int rotation = (int)(w * (2500 - 500) / 270.0 + 500); 
-  //Serial.println(rotation);
-  servophi.writeMicroseconds(rotation);
-}
-
-void writeangletheta(float w) {
-  int rotation = (int)(w * (2500 - 500) / 270.0 + 500);
-  //Serial.println(rotation);
-  servotheta.writeMicroseconds(rotation);
-}
-
-void delta() {
-  xjoy = analogRead(joystickX);
-
-  if (xjoy >= midx) {
-    deltatheta = (((xjoy - midx) / (float)(1024 - midx)) * deg_per_run);
-  }
-  if (xjoy <= midx) {
-    deltatheta = (((xjoy - midx) / (float)(midx)) * deg_per_run);
-  }
-
-  yjoy = analogRead(joystickY);
-
-  if (yjoy >= midy) {
-    deltaphi = (((yjoy - midy) / (float)(1024 - midy)) * deg_per_run);
-  }
-  if (yjoy <= midy) {
-    deltaphi = (((yjoy - midy) / (float)(1024 - midy)) * deg_per_run);
-  }
-  deltatheta = filter(deltatheta);
-  deltaphi = filter(deltaphi);
+  midX = sumX/20;
+  midY = sumY/20;
   
 }
 
-void pass_thought() { 
-   // chancge to just close some swithchens of any kind
-  deltatheta = digitalRead(passThoughttheta); 
-  deltaphi = digitalRead(passThoughtphi);
+// ================================================
+// JOYSTICK NORMALIZATION
+// ================================================
+
+void joystickactive() {
+  if(abs(joyX-midX) > xDEADZONE || abs(joyY-midY) > yDEADZONE)
+  {
+    active = true;
+  }
+  
+  else
+  {
+    active = false;
+  }
+
+  //for debugging purposes
+  deadzonevalueTheta = abs(joyX-midX);
+  deadzonevaluePhi = abs(joyY-midY);
 }
 
-void joycal() {
-  // store fist values 
-  midx = analogRead(joystickX);  
-  midy = analogRead(joystickY);
+// ================================================
+// SERVO WRITING
+// ================================================
+
+//Converts angle to PWM pulse width
+
+void writeServoPhi(float angle) {
+  angle = constrain(angle, MIN_ANGLE, MAX_ANGLE);
+  int pulse = angle * (2000/270.0) + 500;
+  //Serial.println(rotation);
+  if(active == true){
+  servoPhi.writeMicroseconds(pulse);
+  }
 }
+
+void writeServoTheta(float angle) {
+  angle = constrain(angle, MIN_ANGLE, MAX_ANGLE);
+  int pulse = angle * (2000/270.0) + 500;
+
+  if(active == true){
+  servoTheta.writeMicroseconds(pulse);
+  }
+}
+// ================================================
+// JOYSTICK READING
+// ================================================
+
+void delta() {
+  filteredX = 0.8 * filteredX + 0.2 * analogRead(joystickX);
+  filteredY = 0.8 * filteredY + 0.2 * analogRead(joystickY);
+
+  joyX = filteredX;
+  if (joyX >= midX) {
+    deltaTheta = (((joyX - midX) / (float)(1024 - midX)) * deltaMode);
+  }
+  else if (joyX <= midX) {
+    deltaTheta = (((joyX - midX) / (float)(midX)) * deltaMode);
+  }
+
+  joyY = filteredY;
+  if (joyY >= midY) {
+    deltaPhi = (((joyY - midY) / (float)(1024 - midY)) * deltaMode);
+  }
+  else if(joyY <= midY) {
+    deltaPhi = (((joyY - midY) / (float)(midY)) * deltaMode);
+  }
+}
+// ================================================
+// test printing and loging 
+// ================================================
+
 void testprint(){
   Serial.print("X: ");
-  Serial.print(xjoy);
+  Serial.print(joyX);
   Serial.print(" | Y: ");
-  Serial.println(yjoy);
+  Serial.println(joyY);
 
   Serial.print("dX: ");
-  Serial.print(deltatheta);
-  Serial.print(" |dY: ");
-  Serial.println(deltaphi);
+  Serial.print(deltaTheta);
+  Serial.print(" |d Y: ");
+  Serial.println(deltaPhi);
 
   Serial.print("θ: ");
   Serial.print(theta);
   Serial.print(" |φ: ");
   Serial.println(phi);
 
-  Serial.print("change ");
-  Serial.println(loop_is_delta);
+  Serial.print("Active: ");
+  Serial.println(active);
+  Serial.print("DeadzoneX: ");
+  Serial.println(deadzonevalueTheta);
+  Serial.print(" | DeadzoneY: ");
+  Serial.println(deadzonevaluePhi);
 
   Serial.print("wait ");
-  Serial.println(bottonwait);
+  Serial.println(buttonWait);
 
-  Serial.print("botton ");
-  Serial.println(analogRead(bottonpin));
-
+  Serial.print("button ");
+  Serial.println(analogRead(buttonPin));
 }
 
+// ================================================
+// SETUP
+// ================================================
 void setup() {
+  Serial.begin(9600);
   joycal();
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
-  servotheta.attach(pintheta);
-  servophi.attach(pinphi);
-  Serial.begin(9600);
+  servoTheta.attach(pinTheta);
+  servoPhi.attach(pinPhi);
 }
 
-void loop() {
-  if (loop_is_delta == true) {
-  xjoy = analogRead(joystickX);
-  yjoy = analogRead(joystickY);
+// ================================================
+// MAIN LOOP
+// ================================================
+
+  void loop() {
+  if (deltaMode == true) {
+  joystickactive();
   delta();
 
+  if (abs(deltaTheta) > 0.02)
+  {
+    theta += deltaTheta * DEG_PER_LOOP;
+  }
 
+  if(abs(deltaPhi) > 0.02)
+  {
+    phi += deltaPhi * DEG_PER_LOOP;
+  }
   }
   else {
     //pass_thought(); // might not want to read and hust pass it thought
     Serial.println("got in");
-    //loop_is_delta = false ;
-  }
-  if ((phi <= 270) and (deltaphi > 0)){ 
-  phi = phi + deltaphi;
-  }
-  else if ((phi >= 0) and (deltaphi < 0)){
-  phi = phi + deltaphi;
-  }
-  if ((theta <= 270) and (deltatheta > 0)){ 
-  theta = theta + deltatheta;
-  }
-  else if ((theta >= 0) and (deltatheta < 0)){
-  theta = theta + deltatheta;
-  }
-  writeanglephi(phi);
-  writeanglephi(theta);
+    deltaMode = false ;
+  } 
 
-  if ((analogRead(bottonpin) > 700) and (bottonwait < 0) and loop_is_delta == true ) {
-    loop_is_delta = false;
-    bottonwait = hz*2;
-  }
-  if ((analogRead(bottonpin) > 700) and (bottonwait < 0) and loop_is_delta == false ) { 
-    loop_is_delta = true;
-    bottonwait = hz*2;
-  }
-    if (bottonwait > -5){
-  bottonwait = bottonwait - 1;
-  }
+  theta = constrain(theta, MIN_ANGLE, MAX_ANGLE);
+  phi = constrain(phi, MIN_ANGLE, MAX_ANGLE);
+  
+  writeServoPhi(phi);
+  writeServoTheta(theta);
+  
 
-
-  delay(wait);
+  
+  if ((analogRead(buttonPin) > 700) and (buttonWait < 0) and deltaMode == true ) {
+   deltaMode = false;
+   buttonWait = 100;
+  }
+  if ((analogRead(buttonPin) > 700) and (buttonWait < 0) and deltaMode == false ) { 
+   deltaMode = true;
+    buttonWait = 100;
+  }
+  // Serial.print("change");
+  // Serial.println(deltaMode);
+  // Serial.print("wait");
+  // Serial.println(buttonWait);
+  // Serial.print("button");
+  // Serial.println(analogRead(buttonPin));
+  buttonWait = buttonWait - 1;
   testprint();
-}
+  delay(LOOP_DELAY);
+  }
