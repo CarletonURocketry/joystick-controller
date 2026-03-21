@@ -1,6 +1,10 @@
 #include <Servo.h>
 #include <math.h>
 
+#include <iostream>
+#include <fstream>
+#include <string>
+
 // ==============================================
 // PIN DEFINITIONS
 // ==============================================
@@ -21,7 +25,7 @@ int buttonWait = 0;
 // ===============================================
 // PARAMETERS
 // ===============================================
-const int LOOP_HZ = 100;// loops per second (hz)
+const int LOOP_HZ = 300;// loops per second (hz)
 const float LOOP_DELAY = 1000/LOOP_HZ ; // Delay
 
 const float MAX_DEG_PER_SEC = 100.0;
@@ -59,6 +63,57 @@ float deadzonevaluePhi = 0;
 
 float filteredX = 0;
 float filteredY = 0;
+
+#include <iostream>
+#include <fstream>
+#include <string>
+
+// ================================================
+// new file
+// ================================================
+int file_start() {
+    std::ofstream file("test.csv");
+    if (file.is_open()) {
+        file << ("X,Y,dX,dy,θ,φ,active,DeadzoneX,DeadzoneY,wait,button");
+    } else {
+        std::cerr << "Unable to open file\n";
+    }
+    return 0;
+}
+// ================================================
+// JOYSTICK CALIBRATION
+// ================================================
+int file_wright() {
+    std::ofstream file("test.csv");
+    if (file.is_open()) {
+        file << (joyX);
+        file << (",");
+        file << (joyY);
+        file << (",");
+        file << (deltaTheta);
+        file << (",");
+        file << (deltaPhi);
+        file << (",");
+        file << (theta);
+        file << (",");
+        file << (phi);
+        file << (",");
+        file << (active);
+        file << (",");
+        file << (deadzonevalueTheta);
+        file << (",");
+        file << (deadzonevaluePhi);
+        file << (",");
+        file << (buttonWait);
+        file << (",");
+        file << (analogRead(buttonPin));
+        file << ("\n");
+        file.close();
+    } else {
+        std::cerr << "Unable to open file\n";
+    }
+    return 0;
+}
 
 // ================================================
 // JOYSTICK CALIBRATION
@@ -193,6 +248,7 @@ void setup() {
   digitalWrite(LED_BUILTIN, HIGH);
   servoTheta.attach(pinTheta);
   servoPhi.attach(pinPhi);
+  //file_start(); look at next year
 }
 
 // ================================================
@@ -204,12 +260,12 @@ void setup() {
   joystickactive();
   delta();
 
-  if (abs(deltaTheta) > 0.02)
+  if (abs(deltaTheta) > 0.06)
   {
     theta += deltaTheta * DEG_PER_LOOP;
   }
 
-  if(abs(deltaPhi) > 0.02)
+  if(abs(deltaPhi) > 0.06)
   {
     phi += deltaPhi * DEG_PER_LOOP;
   }
@@ -228,11 +284,11 @@ void setup() {
   
 
   
-  if ((analogRead(buttonPin) > 700) and (buttonWait < 0) and deltaMode == true ) {
+  if ((analogRead(buttonPin) < 5) and (buttonWait < 0) and deltaMode == true ) {
    deltaMode = false;
    buttonWait = 100;
   }
-  if ((analogRead(buttonPin) > 700) and (buttonWait < 0) and deltaMode == false ) { 
+  if ((analogRead(buttonPin) < 5) and (buttonWait < 0) and deltaMode == false ) { 
    deltaMode = true;
     buttonWait = 100;
   }
@@ -242,7 +298,10 @@ void setup() {
   // Serial.println(buttonWait);
   // Serial.print("button");
   // Serial.println(analogRead(buttonPin));
+  if  (buttonWait>-10){
   buttonWait = buttonWait - 1;
+  }
+  //file_wright(); doe not work look at next year
   testprint();
   delay(LOOP_DELAY);
   }
